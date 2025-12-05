@@ -55,14 +55,16 @@ pipeline {
         stage('Docker Push') {
             steps {
                 withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED}", usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-                    sh '''
-                        # safer way to pass password to docker login
-                        echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-                        TAG=$(git rev-parse --short HEAD)
-                        docker push ${DOCKER_IMAGE}:$TAG
-                        docker push ${DOCKER_IMAGE}:latest
-                        docker logout
-                    '''
+                    script {
+                        TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                        sh """
+                            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+                            docker push ${DOCKER_IMAGE}:${TAG}
+                            docker tag ${DOCKER_IMAGE}:${TAG} ${DOCKER_IMAGE}:latest
+                            docker push ${DOCKER_IMAGE}:latest
+                            docker logout
+                        """
+                    }
                 }
             }
         }
