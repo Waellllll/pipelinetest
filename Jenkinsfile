@@ -7,15 +7,15 @@ pipeline {
     }
 
     environment {
-        REGISTRY = "votre-registry.com/votre-projet"   // Changez selon votre registre Docker
-        IMAGE_NAME = "mon-application"
+        REGISTRY = "waelkhalfi/alpine"   // Changez selon votre registre Docker
+        IMAGE_NAME = "alpine"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/votre-user/votre-repo.git'
+                git branch: 'main', url: 'https://github.com/Waellllll/pipelinetest.git'
             }
         }
 
