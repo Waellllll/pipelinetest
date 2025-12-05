@@ -2,55 +2,48 @@ pipeline {
     agent any
 
     triggers {
-        // Déclenchement automatique lors d’un push Git (via webhook GitHub/GitLab)
         githubPush()
     }
 
+    tools {
+        jdk 'jdk17'
+        maven 'maven3'
+    }
+
     environment {
-        REGISTRY = "waelkhalfi/alpine"   // Changez selon votre registre Docker
-        IMAGE_NAME = "alpine"
+        REGISTRY = "waelkhalfi"          // DockerHub username
+        IMAGE_NAME = "alpine"            // Image name in DockerHub
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/Waellllll/pipelinetest.git'
+                checkout scm
             }
         }
 
-        stage('Clean') {
+        stage('Build Maven') {
             steps {
-                sh 'mvn clean'         // Exemple pour un projet Maven
-                // ou : sh 'rm -rf build/*'
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'mvn package'       // Ou la commande adaptée à votre projet
+                sh 'mvn clean install -DskipTests'
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh """
-                    docker build -t ${REGISTRY}/${IMAGE_NAME}:latest .
-                """
+                script {
+                    dockerImage = docker.build("${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}")
+                }
             }
         }
 
         stage('Docker Push') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-creds',
-                                                  usernameVariable: 'DOCKER_USER',
-                                                  passwordVariable: 'DOCKER_PASS')]) {
-
-                    sh """
-                        echo "$DOCKER_PASS" | docker login $REGISTRY -u "$DOCKER_USER" --password-stdin
-                        docker push ${REGISTRY}/${IMAGE_NAME}:latest
-                        docker logout
-                    """
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-creds') {
+                        dockerImage.push()
+                        dockerImage.push("latest")
+                    }
                 }
             }
         }
@@ -58,10 +51,10 @@ pipeline {
 
     post {
         success {
-            echo "Build & Push successfully completed!"
+            echo "🎉 Pipeline successfully completed!"
         }
         failure {
-            echo "Pipeline failed."
+            echo "❌ Pipeline failed."
         }
     }
 }
