@@ -2,38 +2,45 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "waelkhalfi/alpine"
-        DOCKER_TAG   = "${env.GIT_COMMIT.take(7)}"
-        JAVA_HOME    = "/usr/lib/jvm/java-17-openjdk-amd64"
-        PATH         = "${JAVA_HOME}/bin:${env.PATH}"
+        REGISTRY    = "waelkhalfi"          // DockerHub username
+        IMAGE_NAME  = "alpine"              // Docker image name
+        DOCKER_CRED = "docker-creds"        // Jenkins Docker credentials ID
+        JAVA_HOME   = "/usr/lib/jvm/java-17-openjdk-amd64"
+        PATH        = "${JAVA_HOME}/bin:${env.PATH}"
+    }
+
+    tools {
+        jdk 'jdk17'       // Must match Jenkins Global Tool Configuration
+        maven 'maven'     // Must match Jenkins Global Tool Configuration
     }
 
     stages {
-        stage('Checkout SCM') {
+
+        stage('Checkout') {
             steps {
                 checkout scm
-                script { echo "Branch: ${env.BRANCH_NAME ?: 'unknown'}" }
+                script { 
+                    echo "Branch: ${env.BRANCH_NAME ?: 'unknown'}" 
+                }
             }
         }
 
         stage('Clean + Build Maven') {
-            tools {
-                maven 'Maven' // Make sure 'Maven' tool is configured in Jenkins
-            }
             steps {
                 sh '''
-                    echo "JAVA_HOME=${JAVA_HOME}"
-                    java -version
-                    mvn -B clean package -DskipTests=false
+                  echo "JAVA_HOME=$JAVA_HOME"
+                  java -version
+                  mvn -B clean package -DskipTests=false
                 '''
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                }
             }
         }
 
         stage('Unit Tests') {
-            tools {
-                maven 'Maven'
-            }
             steps {
                 sh 'mvn test'
             }
@@ -42,35 +49,31 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    sh '''
-                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                    '''
+                    def tag = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${tag} ."
                 }
             }
         }
 
         stage('Docker Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-creds', 
-                    usernameVariable: 'DH_USER', 
-                    passwordVariable: 'DH_PASS'
-                )]) {
-                    sh '''
-                        echo $DH_PASS | docker login -u $DH_USER --password-stdin
-                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                    '''
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED}", usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+                    script {
+                        def tag = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                        sh """
+                            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+                            docker push ${REGISTRY}/${IMAGE_NAME}:${tag}
+                            docker push ${REGISTRY}/${IMAGE_NAME}:latest
+                            docker logout
+                        """
+                    }
                 }
             }
         }
     }
 
     post {
-        success {
-            echo "✅ Pipeline completed successfully"
-        }
-        failure {
-            echo "❌ Pipeline failed"
-        }
+        success { echo "🎉 Pipeline succeeded: ${REGISTRY}/${IMAGE_NAME}" }
+        failure { echo "❌ Pipeline failed" }
     }
 }
