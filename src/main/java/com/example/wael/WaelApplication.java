@@ -1,13 +1,13 @@
-package tn.esprit.spring;
+package com.example.wael;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class TimesheetDevopsApplication {
+public class WaelApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(TimesheetDevopsApplication.class, args);
+		SpringApplication.run(WaelApplication.class, args);
 	}
 
 }
