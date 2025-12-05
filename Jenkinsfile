@@ -8,8 +8,8 @@ pipeline {
     }
 
     tools {
-        jdk 'jdk17'       // Make sure this JDK is configured in Jenkins
-        maven 'maven'     // Make sure this Maven installation exists in Jenkins
+        jdk 'jdk17'       // Must match Jenkins Global Tool Configuration
+        maven 'maven'     // Must match Jenkins Global Tool Configuration
     }
 
     stages {
@@ -17,13 +17,19 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                script { echo "Branch: ${env.BRANCH_NAME ?: 'unknown'}" }
+                script { 
+                    echo "Branch: ${env.BRANCH_NAME ?: 'unknown'}" 
+                }
             }
         }
 
         stage('Clean + Build Maven') {
             steps {
-                sh 'mvn -B clean package -DskipTests=false'
+                sh '''
+                  echo "JAVA_HOME=$JAVA_HOME"
+                  java -version
+                  mvn -B clean package -DskipTests=false
+                '''
             }
             post {
                 success {
