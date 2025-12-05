@@ -1,18 +1,15 @@
 pipeline {
     agent any
 
-    triggers {
-        githubPush()
+    environment {
+        REGISTRY    = "waelkhalfi"          // DockerHub username
+        IMAGE_NAME  = "alpine"              // Docker image name
+        DOCKER_CRED = "docker-creds"        // Jenkins Docker credentials ID
     }
 
     tools {
-        jdk 'jdk17'
-        maven 'maven'
-    }
-
-    environment {
-        REGISTRY = "waelkhalfi"          // DockerHub username
-        IMAGE_NAME = "alpine"            // Image name in DockerHub
+        jdk 'jdk17'       // Make sure this JDK is configured in Jenkins
+        maven 'maven'     // Make sure this Maven installation exists in Jenkins
     }
 
     stages {
@@ -20,41 +17,53 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                script { echo "Branch: ${env.BRANCH_NAME ?: 'unknown'}" }
             }
         }
 
-        stage('Build Maven') {
+        stage('Clean + Build Maven') {
             steps {
-                sh 'mvn clean install -DskipTests'
+                sh 'mvn -B clean package -DskipTests=false'
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                }
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh 'mvn test'
             }
         }
 
         stage('Docker Build') {
             steps {
                 script {
-                    dockerImage = docker.build("${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}")
+                    def tag = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${tag} ."
                 }
             }
         }
 
         stage('Docker Push') {
             steps {
-                script {
-                    docker.withRegistry('https://index.docker.io/v1/', 'docker-creds') {
-                        dockerImage.push()
-                        dockerImage.push("latest")
-                    }
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED}", usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+                    sh '''
+                        echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+                        TAG=$(git rev-parse --short HEAD)
+                        docker push ${REGISTRY}/${IMAGE_NAME}:$TAG
+                        docker push ${REGISTRY}/${IMAGE_NAME}:latest
+                        docker logout
+                    '''
                 }
             }
         }
     }
 
     post {
-        success {
-            echo "🎉 Pipeline successfully completed!"
-        }
-        failure {
-            echo "❌ Pipeline failed."
-        }
+        success { echo "🎉 Pipeline succeeded: ${REGISTRY}/${IMAGE_NAME}" }
+        failure { echo "❌ Pipeline failed" }
     }
 }
